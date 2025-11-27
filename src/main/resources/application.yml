@@ -2,19 +2,31 @@ server:
   port: 8080
 spring:
   application:
-    name: bookstore-service
+    name: warehouse-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/bookingstore
+    url: jdbc:postgresql://localhost:5432/sensordb
     username: postgres
     password: postgres
+    postgres:
+      url: jdbc:postgresql://localhost:5432/sensordb
+      username: postgres
+      password: postgres
+      driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: create-drop
     properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
       hibernate.format_sql: true
       hibernate.jdbc.time_zone: UTC
   flyway:
-    enabled: true
+    url: jdbc:postgresql://localhost:5432/sensordb   # optional, defaults to datasource
+    user: postgres
+    password: postgres
+    schemas: public
+    locations: classpath:db/migration
+    enabled: false
     baseline-on-migrate: true
     validate-on-migrate: true
     clean-on-validation-error: true
@@ -23,7 +35,7 @@ spring:
 
 
   kafka:
-    client-id: bookstore-service
+    client-id: warehouse-service
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -39,7 +51,7 @@ spring:
         spring.json.add.type.headers: true
         spring.json.write_dates_as_timestamps: false
     consumer:
-      group-id: ${KAFKA_GROUP:bookstore-writer}
+      group-id: ${KAFKA_GROUP:warehouse-service}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       auto-offset-reset: latest
@@ -55,30 +67,26 @@ spring:
       admin:
           fail-fast: true
 
-  cache:
-    type: redis
-    data:
-      redis:
-        host: localhost
-        port: 6379
 
-  elasticsearch:
-    uris: ${SPRING_ELASTICSEARCH_URIS:http://localhost:9200}
 
 app:
-  cache:
-    booksByIdTtlSeconds: 3600
   kafka:
     topics:
-      book:
-        events: book.events
+      measurements:
+        events: sensor
 
-  search:
-    reindex-on-start: true
-    recreate-index-on-start: false
-    reindex:
-      batch-size: 1000
-      fail-on-error: false
+  udp:
+    listeners:
+      # Listener 1: Temperature Sensor
+      #echo "25.8" | nc.exe -u -w1 127.0.0.1 3344
+      #echo "61.3" | nc.exe -u -w1 127.0.0.1 3355
+      - port: 3344
+        type: TEMPERATURE
+        bind-host: 127.0.0.1
+      - port: 3355
+        type: HUMIDITY
+        # Specific host for this port (e.g., dedicated sensor network IP)
+        bind-host: 127.0.0.1
 
 management:
   tracing:
@@ -99,7 +107,7 @@ management:
         include: health,info,metrics,prometheus
   metrics:
     tags:
-      application: bookstore-service
+      application: warehouse-service
     distribution:
       percentiles-histogram:
         http.server.requests: true
@@ -124,6 +132,3 @@ logging:
     level: "%5p [${spring.application.name:-},trace=%X{traceId:-},span=%X{spanId:-}]"
   level:
     org.hibernate.SQL: INFO
-    org.springframework.data.elasticsearch.client.elc: TRACE
-    org.springframework.cache: TRACE
-    org.springframework.data.redis: DEBUG
