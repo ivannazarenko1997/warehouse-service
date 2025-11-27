@@ -1,66 +1,97 @@
-1. Overview
+README — Warehouse Service
+📦 Warehouse Service
 
-This application is a small reactive monitoring platform for warehouses equipped with environmental sensors. Each warehouse contains sensors that periodically send measurements (temperature and humidity) via UDP.
+Reactive UDP Sensor Listener → Kafka Publisher
 
-The solution consists of two logical services:
+The Warehouse Service receives measurements from temperature and humidity sensors via UDP, parses them, and publishes normalized sensor events to a message broker (Kafka). Each warehouse runs its own instance of this service.
 
-Warehouse Service – receives raw UDP datagrams from sensors, validates and normalizes the data, and forwards structured events to a central system (optionally via a message broker).
+🔧 Features
 
-Central Monitoring Service – aggregates measurements from one or more warehouses, applies configured thresholds for temperature and humidity, and raises alarms when limits are exceeded. Alarms are visible in the logs/console and can be further integrated with external monitoring tools.
+Listens for sensor data over UDP
 
-The system is designed to be reactive, non-blocking, and easily extensible for additional sensor types or alert channels.
+Temperature → 3344
 
-2. Functional Requirements Mapping
-   2.1 Sensor Types and Protocol
+Humidity → 3355
 
-The system currently supports two sensor types:
+Parses messages in the format:
 
-Temperature
-
-UDP Port: 3344
-
-Message format: sensor_id=t1; value=30
-
-Threshold: 35°C
-
-Humidity
-
-UDP Port: 3355
-
-Message format: sensor_id=h1; value=40
-
-Threshold: 50%
-
-Each sensor sends UDP packets in the form:
-
-sensor_id=<ID>; value=<numeric_value>
+sensor_id=t1; value=30
 
 
-The Warehouse Service parses these datagrams, extracts sensor_id and value, and also derives the sensor type based on the port or configuration.
+Creates structured internal events
 
-2.2 Threshold Monitoring & Alarms
+Publishes events to Kafka topic:
 
-The Central Monitoring Service maintains configurable thresholds for:
+measurements.events
 
-TEMPERATURE_MAX = 35°C
 
-HUMIDITY_MAX = 50%
+Reactive non-blocking implementation (Reactor Netty)
 
-For each incoming measurement:
+Error handling for malformed datagrams
 
-If the value is within the allowed range → status is logged as OK.
+Test coverage for:
 
-If the value exceeds the configured threshold → an ALARM is raised.
+Parsing
 
- 
-Possible urls:
-GET http://localhost:8080/v1/api/alarms?sensorType=TEMPERATURE
-GET http://localhost:8080/v1/api/alarms?sensorType=HUMIDITY
-GET http://localhost:8080/v1/api/alarms?page=0&size=20
-GET http://localhost:8080/v1/api/alarms?page=1&size=20
-GET http://localhost:8080/v1/api/alarms?page=2&size=50
-GET http://localhost:8080/v1/api/alarms?page=0&size=100
-GET http://localhost:8080/v1/api/alarms?sort=id,asc
-GET http://localhost:8080/v1/api/alarms?sort=id,desc
-GET http://localhost:8080/v1/api/alarms?sensorType=TEMPERATURE&page=0&size=20&sort=createdAt,desc
-GET http://localhost:8080/v1/api/alarms?sensorType=HUMIDITY&page=1&size=50&sort=createdAt,asc
+Mapper conversion
+
+Kafka producer
+
+UDP listener (unit test with mocks)
+
+🗂️ Project Structure
+warehouse-service/
+ ├── config/           # UDP configs, Kafka configs
+ ├── process/          # UDP reactive listener
+ ├── kafka/            # Producer + Kafka DTOs
+ ├── model/            # Event + datagram models
+ ├── mapper/           # Conversion between datagram → event
+ ├── service/          # Business services
+ ├── domain/           # JPA entities (Sensors)
+ ├── controller/       # REST endpoints (alarms)
+ └── test/             # Unit tests
+
+📨 UDP Input Format
+Sensor Type	Port	Example	Threshold
+Temperature	3344	sensor_id=t1; value=30	> 35°C
+Humidity	3355	sensor_id=h1; value=40	> 50%
+🛠️ Run Warehouse Service
+1. Start Kafka & PostgreSQL (optional)
+docker compose up -d
+
+2. Run application
+./mvnw spring-boot:run
+
+
+You should see:
+
+UDP listener ready for [TEMPERATURE] on 0.0.0.0:3344
+UDP listener ready for [HUMIDITY] on 0.0.0.0:3355
+
+🧪 Testing
+
+Run all tests:
+
+./mvnw test
+
+
+Sensors can be simulated with Netcat:
+
+echo "sensor_id=t1; value=38" | nc -u -w1 127.0.0.1 3344
+
+🔥 Responsibilities
+
+The Warehouse Service:
+
+Receives datagrams
+
+Parses measurement values
+
+Builds domain events
+
+Publishes them to Kafka
+
+Logs basic information
+
+Does NOT apply thresholds
+(this is done by the Central Monitoring Service)
